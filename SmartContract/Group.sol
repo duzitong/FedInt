@@ -9,97 +9,92 @@ contract Group {
         string homeUrl;
         address[] trustedAddrs;
         uint approval;
-        bool approved;
     }
 
     mapping(address => Company) public companies;
-    address[] public companyAddrs;
-    string[] public trustedCaCerts;
+    address[] public allCompanyAddrs;
+    address[] public approvedCompanyAddrs;
 
     function Group(string name, string caCert, string homeUrl) public {
-        companyAddrs.push(msg.sender);
+        allCompanyAddrs.push(msg.sender);
         companies[msg.sender] = Company({
             delegate: msg.sender,
             name: name,
             caCert: caCert,
             homeUrl: homeUrl,
             trustedAddrs: new address[](0),
-            approval: 1,
-            approved: true
+            approval: 1
         });
-        trustedCaCerts.push(caCert);
+        approvedCompanyAddrs.push(msg.sender);
     }
 
     function stringEquals(string s1, string s2) internal returns (bool) {
         return keccak256(s1) == keccak256(s2);
     }
 
-    function companyAddrContains(address addr) internal returns (bool) {
-        for (uint i = 0; i < companyAddrs.length; i++) {
-            if (addr == companyAddrs[i]) {
+    function addressArrayContains(address[] addressArray, address addr) internal returns (bool) {
+        for (uint i = 0; i < addressArray.length; i++) {
+            if (addr == addressArray[i]) {
                 return true;
             }
         }
         return false;
     }
 
-    function removeFromTrustedCaCerts(string cert) internal {
-        for (uint i = 0; i < trustedCaCerts.length; i++) {
-            if (stringEquals(cert, trustedCaCerts[i])) {
-                delete trustedCaCerts[i];
-            }
-        }
-    }
-
     function addCompany(string name, string caCert, string homeUrl) public {
-        for (uint i = 0; i < companyAddrs.length; i++) {
-            if (stringEquals(name, companies[companyAddrs[i]].name)) {
+        for (uint i = 0; i < allCompanyAddrs.length; i++) {
+            if (stringEquals(name, companies[allCompanyAddrs[i]].name)) {
                 return;
             }
         }
         
-        companyAddrs.push(msg.sender);
+        allCompanyAddrs.push(msg.sender);
         companies[msg.sender] = Company({
             delegate: msg.sender,
             name: name,
             caCert: caCert,
             homeUrl: homeUrl,
             trustedAddrs: new address[](0),
-            approval: 0,
-            approved: false
+            approval: 0
         });
     }
 
     function updateCompanyCaCert(string cert) public {
-        require(companyAddrContains(msg.sender));
+        require(addressArrayContains(allCompanyAddrs, msg.sender));
 
-        removeFromTrustedCaCerts(companies[msg.sender].caCert);
         companies[msg.sender].caCert = cert;
     }
 
     function updateCompanyHomeUrl(string homeUrl) public {
-        require(companyAddrContains(msg.sender));
+        require(addressArrayContains(allCompanyAddrs, msg.sender));
 
         companies[msg.sender].homeUrl = homeUrl;
     }
 
     function approveCompany(address companyAddr) public {
-        require(companyAddrContains(msg.sender) && companyAddrContains(companyAddr));
+        require(addressArrayContains(approvedCompanyAddrs, msg.sender) && addressArrayContains(allCompanyAddrs, companyAddr));
         
         companies[msg.sender].trustedAddrs.push(companyAddr);
         companies[companyAddr].approval++;
-        if ((companies[companyAddr].approval > companyAddrs.length / 2) && !companies[companyAddr].approved) {
-            trustedCaCerts.push(companies[companyAddr].caCert);
-            companies[companyAddr].approved = true;
+        if ((companies[companyAddr].approval > approvedCompanyAddrs.length / 2) && !addressArrayContains(approvedCompanyAddrs, companyAddr)) {
+            approvedCompanyAddrs.push(companyAddr);
         }
     }
 
-    function lengthOfCaCerts() public returns(uint) {
-        return trustedCaCerts.length;
+    function lengthOfapprovedCompanies() public returns(uint) {
+        return approvedCompanyAddrs.length;
     }
 
-    function getCaCert(uint index) public returns(string) {
-        return trustedCaCerts[index];
+    function getApprovedCompanyAddress(uint index) public returns(address) {
+        return approvedCompanyAddrs[index];
+    }
+
+    function lengthOfallCompanies() public returns(uint) {
+        return allCompanyAddrs.length;
+    }
+
+    function getCompanyAddress(uint index) public returns(address) {
+        return allCompanyAddrs[index];
     }
 
     function getCompanyInfo(address addr) public returns(string name, string caCert, string homeUrl) {
