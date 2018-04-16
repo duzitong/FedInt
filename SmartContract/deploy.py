@@ -18,10 +18,11 @@ w3.middleware_stack.inject(geth_poa_middleware, layer=0)
 contract = w3.eth.contract(abi=interface['abi'], bytecode=interface['bin'])
 print(interface['abi'])
 account = w3.eth.accounts[0]
-tx_hash = contract.constructor(conf['name'], open(conf['caCert']).read(), conf['homeUrl']).transact({'from': account, 'gas': 0x47b760})
+tx_hash = contract.constructor(conf['name'], open(conf['caCert']).read().strip(), conf['homeUrl']).transact({'from': account, 'gas': 0x47b760})
 tx_receipt = None
 while(not tx_receipt):
     tx_receipt = w3.eth.getTransactionReceipt(tx_hash)
+    time.sleep(1)
 
 contract_address = tx_receipt['contractAddress']
 print(contract_address)
