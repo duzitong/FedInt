@@ -3,7 +3,6 @@ pragma solidity ^0.4.21;
 contract Group {
 
     struct Company {
-        address delegate;
         string name;
         string caCert;
         string homeUrl;
@@ -18,7 +17,6 @@ contract Group {
     function Group(string name, string caCert, string homeUrl) public {
         allCompanyAddrs.push(msg.sender);
         companies[msg.sender] = Company({
-            delegate: msg.sender,
             name: name,
             caCert: caCert,
             homeUrl: homeUrl,
@@ -50,7 +48,6 @@ contract Group {
         
         allCompanyAddrs.push(msg.sender);
         companies[msg.sender] = Company({
-            delegate: msg.sender,
             name: name,
             caCert: caCert,
             homeUrl: homeUrl,
@@ -81,7 +78,7 @@ contract Group {
         }
     }
 
-    function lengthOfapprovedCompanies() public returns(uint) {
+    function lengthOfApprovedCompanies() public returns(uint) {
         return approvedCompanyAddrs.length;
     }
 
@@ -89,7 +86,7 @@ contract Group {
         return approvedCompanyAddrs[index];
     }
 
-    function lengthOfallCompanies() public returns(uint) {
+    function lengthOfAllCompanies() public returns(uint) {
         return allCompanyAddrs.length;
     }
 
