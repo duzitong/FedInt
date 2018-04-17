@@ -16,7 +16,8 @@ interface = compiled['<stdin>:Group']
 w3 = Web3(HTTPProvider('http://127.0.0.1:8551'))
 w3.middleware_stack.inject(geth_poa_middleware, layer=0)
 contract = w3.eth.contract(abi=interface['abi'], bytecode=interface['bin'])
-print(interface['abi'])
+with open('abi', 'w') as f:
+    f.write(json.dumps(interface['abi']))
 account = w3.eth.accounts[0]
 tx_hash = contract.constructor(conf['name'], open(conf['caCert']).read().strip(), conf['homeUrl']).transact({'from': account, 'gas': 0x47b760})
 tx_receipt = None
@@ -25,5 +26,7 @@ while(not tx_receipt):
     time.sleep(1)
 
 contract_address = tx_receipt['contractAddress']
-print(contract_address)
+with open('address', 'w') as f:
+    print(contract_address)
+    f.write(contract_address)
 

@@ -10,6 +10,20 @@ contract Group {
         uint approval;
     }
 
+    event Added(
+        address addr
+    );
+
+    event Updated(
+        address addr,
+        string key,
+        string original
+    );
+
+    event Approved(
+        address addr
+    );
+
     mapping(address => Company) public companies;
     address[] public allCompanyAddrs;
     address[] public approvedCompanyAddrs;
@@ -54,18 +68,23 @@ contract Group {
             trustedAddrs: new address[](0),
             approval: 0
         });
+        Added(msg.sender);
     }
 
     function updateCompanyCaCert(string cert) public {
         require(addressArrayContains(allCompanyAddrs, msg.sender));
 
+        string memory originalCert = companies[msg.sender].caCert;
         companies[msg.sender].caCert = cert;
+        Updated(msg.sender, "caCert", originalCert);
     }
 
     function updateCompanyHomeUrl(string homeUrl) public {
         require(addressArrayContains(allCompanyAddrs, msg.sender));
 
+        string memory originalUrl = companies[msg.sender].homeUrl;
         companies[msg.sender].homeUrl = homeUrl;
+        Updated(msg.sender, "homeUrl", originalUrl);
     }
 
     function approveCompany(address companyAddr) public {
@@ -75,6 +94,7 @@ contract Group {
         companies[companyAddr].approval++;
         if ((companies[companyAddr].approval > approvedCompanyAddrs.length / 2) && !addressArrayContains(approvedCompanyAddrs, companyAddr)) {
             approvedCompanyAddrs.push(companyAddr);
+            Approved(companyAddr);
         }
     }
 
