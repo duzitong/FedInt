@@ -5,7 +5,7 @@ var MongoClient = require('mongodb').MongoClient
     , abi = require('./abi.json');
 
 var url = 'mongodb://localhost:27017/';
-var contractAddress = '0xB6E07B738d7fE40d1dcbf40d5cb0cbdD30615b99';
+var contractAddress = '0x0f2BC94cBC1816B7ccf8F53164A9F45cFF21e44C';
 var app = express();
 var mongoDBConnection, contract;
 

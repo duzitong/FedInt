@@ -1,4 +1,4 @@
-pragma solidity ^0.4.21;
+pragma solidity ^0.4.18;
 
 contract Group {
 
@@ -40,11 +40,11 @@ contract Group {
         approvedCompanyAddrs.push(msg.sender);
     }
 
-    function stringEquals(string s1, string s2) internal returns (bool) {
+    function stringEquals(string s1, string s2) internal pure returns (bool) {
         return keccak256(s1) == keccak256(s2);
     }
 
-    function addressArrayContains(address[] addressArray, address addr) internal returns (bool) {
+    function addressArrayContains(address[] addressArray, address addr) internal pure returns (bool) {
         for (uint i = 0; i < addressArray.length; i++) {
             if (addr == addressArray[i]) {
                 return true;
@@ -98,25 +98,33 @@ contract Group {
         }
     }
 
-    function lengthOfApprovedCompanies() public returns(uint) {
+    function lengthOfApprovedCompanies() public view returns(uint) {
         return approvedCompanyAddrs.length;
     }
 
-    function getApprovedCompanyAddress(uint index) public returns(address) {
+    function getApprovedCompanyAddress(uint index) public view returns(address) {
         return approvedCompanyAddrs[index];
     }
 
-    function lengthOfAllCompanies() public returns(uint) {
+    function lengthOfAllCompanies() public view returns(uint) {
         return allCompanyAddrs.length;
     }
 
-    function getCompanyAddress(uint index) public returns(address) {
+    function getCompanyAddress(uint index) public view returns(address) {
         return allCompanyAddrs[index];
     }
 
-    function getCompanyInfo(address addr) public returns(string name, string caCert, string homeUrl) {
+    function getCompanyInfo(address addr) public view returns(string name, string caCert, string homeUrl) {
         name = companies[addr].name;
         caCert = companies[addr].caCert;
         homeUrl = companies[addr].homeUrl;
+    }
+
+    function getLengthOfTrustedCompanies(address addr) public view returns(uint) {
+        return companies[addr].trustedAddrs.length;
+    }
+
+    function getTrustedCompany(address addr, uint index) public view returns(address) {
+        return companies[addr].trustedAddrs[index];
     }
 }

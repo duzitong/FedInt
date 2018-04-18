@@ -4,7 +4,7 @@ from solc import compile_source
 from web3.contract import ConciseContract
 from web3.middleware import geth_poa_middleware
 
-contract_addr = '0x15710ACd22D5f8872AbB2a743c2F4F833479d04A'
+contract_addr = '0x0f2BC94cBC1816B7ccf8F53164A9F45cFF21e44C'
 with open('Group.sol') as f:
     source = f.read()
 
