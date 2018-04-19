@@ -1,20 +1,28 @@
 var MongoClient = require('mongodb').MongoClient
     , Web3 = require('web3')
+    , net = require('net')
     , express = require('express')
+    , bodyParser = require('body-parser')
     , fs = require('fs')
     , assert = require('assert')
     , abi = require('./abi.json');
 
 var url = 'mongodb://localhost:27017/';
+var ipc_path = process.env.IPC_PATH;
 var contractAddress = '0x0f2BC94cBC1816B7ccf8F53164A9F45cFF21e44C';
 var certPath = 'certs.pem';
 var app = express();
 var mongoDBConnection, contract;
+var STATUS = {
+    APPROVED: 'APPROVED',
+    PENDING: 'PENDING',
+    NOT_APPLIED: 'NOT_APPLIED'
+};
 
 if (typeof web3 !== 'undefined') {
     web3 = new Web3(web3.currentProvider);
 } else {
-    web3 = new Web3(new Web3.providers.HttpProvider("http://localhost:8551"));
+    web3 = new Web3(ipc_path, net);
 }
 
 function uniq(a) {
@@ -50,8 +58,8 @@ var setAllCompanies = function (w3, mongo, callback) {
         return Promise.all([...Array(result).keys()].map(function (i) {
             return cont.methods.getCompanyAddress(i).call().then(function (res) {
                 return insertAddressIfNotExist(collection, res);
-            })
-        }))
+            });
+        }));
     }).then(function () {
         callback(mongo);
     });
@@ -67,21 +75,21 @@ var setApprovedCompanies = function (w3, mongo, callback) {
             return Promise.all([...Array(result).keys()].map(function (i) {
                 return cont.methods.getApprovedCompanyAddress(i).call().then(function (res) {
                     return insertAddressIfNotExist(collection, res);
-                })
-            }))
+                });
+            }));
         }
-    }))
+    }));
     calls.push(getMyAddress().then(function (address) {
         return cont.methods.getLengthOfTrustedCompanies(address).call().then(function (result) {
             if (result > 0) {
                 return Promise.all([...Array(result).keys()].map(function (i) {
                     return cont.methods.getTrustedCompany(address, i).call().then(function (res) {
                         return insertAddressIfNotExist(collection, res);
-                    })
-                }))
+                    });
+                }));
             }
-        })
-    }))
+        });
+    }));
     Promise.all(calls).then(function () {
         callback(mongo);
     });
@@ -92,14 +100,34 @@ var updateCertPem = function (docs) {
     return Promise.all(docs.map(function (doc) {
         return getContract().methods.getCompanyInfo(doc['address']).call().then(function (result) {
             certs.push(result['caCert']);
-        })
+        });
     })).then(function () {
         fs.writeFile(certPath, certs.join('\n'), function (err) {
             if (err) {
                 return console.error(err);
+            } else {
+                console.log('CA Certs updated.')
             }
-        })
-    })
+        });
+    });
+}
+
+var getStatus = function (addr, callback) {
+    getMyAddress().then(function (addr) {
+        mongoDBConnection.db('Group').collection('all').findOne({ address: addr }, function (error, doc) {
+            if (doc.address) {
+                mongoDBConnection.db('Group').collection('approved').findOne({ address: addr }, function (err, doc) {
+                    if (doc.address > 0) {
+                        callback(STATUS.APPROVED);
+                    } else {
+                        callback(STATUS.PENDING);
+                    }
+                });
+            } else {
+                callback(STATUS.NOT_APPLIED);
+            }
+        });
+    });
 }
 
 var getDocsInCollection = function (db, name, callback) {
@@ -134,27 +162,37 @@ MongoClient.connect(url, function (err, database) {
                 updateCertPem(docs);
             });
 
+            // Not Tested
             getContract().events.Added()
                 .on('data', function (event) {
-                    console.log(event);
+                    insertAddressIfNotExist(mongoDBConnection.db('Group').collection('all'), event.returnValues['addr']);
                 })
                 .on('changed', function (event) { })
                 .on('error', console.error);
 
             getContract().events.Updated()
                 .on('data', function (event) {
-                    console.log(event);
+                    if (event.returnValues['key'] === 'caCert') {
+                        getDocsInCollection(mongo, 'approved', function (docs) {
+                            updateCertPem(docs);
+                        });
+                    }
                 })
                 .on('changed', function (event) { })
                 .on('error', console.error);
-
+            
+            // Not Tested
             getContract().events.Approved()
                 .on('data', function (event) {
-                    console.log(event);
+                    insertAddressIfNotExist(mongoDBConnection.db('Group').collection('approved'), event.returnValues['addr']).then(function() {
+                        getDocsInCollection(mongo, 'approved', function (docs) {
+                            updateCertPem(docs);
+                        });
+                    });
                 })
                 .on('changed', function (event) { })
                 .on('error', console.error);
-        })
+        });
     });
 });
 
@@ -168,21 +206,19 @@ var sendCompanyDetailsByDocs = function (res, docs) {
             company['caCert'] = result['caCert'];
             company['homeUrl'] = result['homeUrl'];
             resp.push(company);
-        })
+        });
     })).then(function () {
         res.send(resp);
     });
 }
 
-app.use(function (err, req, res, next) {
-    res.status(500).send('Internal Error');
-});
+app.use(bodyParser.json());
 
 app.get('/companies', function (req, res) {
     if (req.query.approved) {
         getDocsInCollection(mongoDBConnection.db('Group'), 'approved', function (docs) {
             sendCompanyDetailsByDocs(res, docs);
-        })
+        });
     } else if (req.query.dismissed) {
         getDocsInCollection(mongoDBConnection.db('Group'), 'dismiss', function (docs) {
             sendCompanyDetailsByDocs(res, docs);
@@ -201,8 +237,100 @@ app.get('/companies', function (req, res) {
     } else {
         getDocsInCollection(mongoDBConnection.db('Group'), 'all', function (docs) {
             sendCompanyDetailsByDocs(res, docs);
-        })
+        });
     }
+});
+
+app.get('/companies/:id', function (req, res) {
+    getContract().methods.getCompanyInfo(req.params.id).call().then(function (result) {
+        let company = {}
+        company['address'] = req.params.id;
+        company['name'] = result['name'];
+        company['caCert'] = result['caCert'];
+        company['homeUrl'] = result['homeUrl'];
+        res.send(company);
+    });
+});
+
+app.get('/status', function (req, res) {
+    getMyAddress().then(function (address) {
+        getStatus(address, function (status) {
+            res.send({ status: status });
+        });
+    });
+});
+
+app.post('/add', function (req, res) {
+    getMyAddress().then(function (address) {
+        getStatus(address, function (status) {
+            if (status === STATUS.NOT_APPLIED) {
+                if (req.body && req.body.name && req.body.caCert && req.body.homeUrl) {
+                    res.send('TODO');
+                } else {
+                    res.status(400).send('Bad Request');
+                }
+            } else {
+                res.status(403).send('Forbidden');
+            }
+        });
+    });
+});
+
+app.post('/update', function (req, res) {
+    getMyAddress().then(function (address) {
+        getStatus(address, function (status) {
+            if (status !== STATUS.NOT_APPLIED) {
+                if (req.body && (req.body.caCert || req.body.homeUrl)) {
+                    res.send('TODO');
+                } else {
+                    res.status(400).send('Bad Request');
+                }
+            } else {
+                res.status(403).send('Forbidden');
+            }
+        });
+    });
+});
+
+app.post('/approve', function (req, res) {
+    getMyAddress().then(function (address) {
+        getStatus(address, function (status) {
+            if (status === STATUS.APPROVED) {
+                if (req.body && req.body.address) {
+                    res.send('TODO');
+                } else {
+                    res.status(400).send('Bad Request');
+                }
+            } else {
+                res.status(403).send('Forbidden');
+            }
+        });
+    });
+});
+
+app.post('/dismiss', function (req, res) {
+    getMyAddress().then(function (address) {
+        getStatus(address, function (status) {
+            if (status === STATUS.APPROVED) {
+                if (req.body && req.body.address) {
+                    res.send('TODO');
+                } else {
+                    res.status(400).send('Bad Request');
+                }
+            } else {
+                res.status(403).send('Forbidden');
+            }
+        });
+    });
+});
+
+app.use(function (req, res, next) {
+    res.status(404).send('Not Found');
+});
+
+app.use(function (err, req, res, next) {
+    console.error(err);
+    res.status(500).send('Internal Error');
 });
 
 var server = app.listen(8080, function () {
