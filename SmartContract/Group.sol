@@ -54,6 +54,7 @@ contract Group {
     }
 
     function addCompany(string name, string caCert, string homeUrl) public {
+        require(!addressArrayContains(allCompanyAddrs, msg.sender));
         for (uint i = 0; i < allCompanyAddrs.length; i++) {
             if (stringEquals(name, companies[allCompanyAddrs[i]].name)) {
                 return;

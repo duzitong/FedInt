@@ -4,12 +4,13 @@ var MongoClient = require('mongodb').MongoClient
     , express = require('express')
     , bodyParser = require('body-parser')
     , fs = require('fs')
+    , pem = require('pem')
     , assert = require('assert')
     , abi = require('./abi.json');
 
 var url = 'mongodb://localhost:27017/';
 var ipc_path = process.env.IPC_PATH;
-var contractAddress = '0x0f2BC94cBC1816B7ccf8F53164A9F45cFF21e44C';
+var contractAddress = '0xB27A2fC06E8048C2b746C62979C56dbcF54F5176';
 var certPath = 'certs.pem';
 var app = express();
 var mongoDBConnection, contract;
@@ -55,7 +56,7 @@ var setAllCompanies = function (w3, mongo, callback) {
     collection.remove({});
     let cont = getContract();
     cont.methods.lengthOfAllCompanies().call().then(function (result) {
-        return Promise.all([...Array(result).keys()].map(function (i) {
+        return Promise.all([...Array(Number(result)).keys()].map(function (i) {
             return cont.methods.getCompanyAddress(i).call().then(function (res) {
                 return insertAddressIfNotExist(collection, res);
             });
@@ -72,7 +73,7 @@ var setApprovedCompanies = function (w3, mongo, callback) {
     let calls = []
     calls.push(cont.methods.lengthOfApprovedCompanies().call().then(function (result) {
         if (result > 0) {
-            return Promise.all([...Array(result).keys()].map(function (i) {
+            return Promise.all([...Array(Number(result)).keys()].map(function (i) {
                 return cont.methods.getApprovedCompanyAddress(i).call().then(function (res) {
                     return insertAddressIfNotExist(collection, res);
                 });
@@ -82,7 +83,7 @@ var setApprovedCompanies = function (w3, mongo, callback) {
     calls.push(getMyAddress().then(function (address) {
         return cont.methods.getLengthOfTrustedCompanies(address).call().then(function (result) {
             if (result > 0) {
-                return Promise.all([...Array(result).keys()].map(function (i) {
+                return Promise.all([...Array(Number(result)).keys()].map(function (i) {
                     return cont.methods.getTrustedCompany(address, i).call().then(function (res) {
                         return insertAddressIfNotExist(collection, res);
                     });
@@ -113,20 +114,18 @@ var updateCertPem = function (docs) {
 }
 
 var getStatus = function (addr, callback) {
-    getMyAddress().then(function (addr) {
-        mongoDBConnection.db('Group').collection('all').findOne({ address: addr }, function (error, doc) {
-            if (doc.address) {
-                mongoDBConnection.db('Group').collection('approved').findOne({ address: addr }, function (err, doc) {
-                    if (doc.address > 0) {
-                        callback(STATUS.APPROVED);
-                    } else {
-                        callback(STATUS.PENDING);
-                    }
-                });
-            } else {
-                callback(STATUS.NOT_APPLIED);
-            }
-        });
+    mongoDBConnection.db('Group').collection('all').findOne({ address: addr }, function (error, doc) {
+        if (doc && doc.address) {
+            mongoDBConnection.db('Group').collection('approved').findOne({ address: addr }, function (err, doc) {
+                if (doc && doc.address) {
+                    callback(STATUS.APPROVED);
+                } else {
+                    callback(STATUS.PENDING);
+                }
+            });
+        } else {
+            callback(STATUS.NOT_APPLIED);
+        }
     });
 }
 
@@ -157,12 +156,16 @@ MongoClient.connect(url, function (err, database) {
 
     setAllCompanies(web3, database.db("Group"), function (mongo) {
         setApprovedCompanies(web3, database.db("Group"), function (mongo) {
+            getDocsInCollection(mongo, 'all', function (docs) {
+                console.log('all');
+                console.log(docs);
+            });
             getDocsInCollection(mongo, 'approved', function (docs) {
+                console.log('approved');
                 console.log(docs);
                 updateCertPem(docs);
             });
 
-            // Not Tested
             getContract().events.Added()
                 .on('data', function (event) {
                     insertAddressIfNotExist(mongoDBConnection.db('Group').collection('all'), event.returnValues['addr']);
@@ -180,11 +183,11 @@ MongoClient.connect(url, function (err, database) {
                 })
                 .on('changed', function (event) { })
                 .on('error', console.error);
-            
+
             // Not Tested
             getContract().events.Approved()
                 .on('data', function (event) {
-                    insertAddressIfNotExist(mongoDBConnection.db('Group').collection('approved'), event.returnValues['addr']).then(function() {
+                    insertAddressIfNotExist(mongoDBConnection.db('Group').collection('approved'), event.returnValues['addr']).then(function () {
                         getDocsInCollection(mongo, 'approved', function (docs) {
                             updateCertPem(docs);
                         });
@@ -260,12 +263,63 @@ app.get('/status', function (req, res) {
     });
 });
 
+function setContract(func, message, async, callback) {
+    getMyAddress().then(function (address) {
+        func.estimateGas({ from: address })
+            .then(function (gasAmount) {
+                console.log(gasAmount);
+                func.send({ from: address, gas: gasAmount * 2 })
+                    .on('transactionHash', function (hash) {
+                        console.log(hash);
+                        if (async) {
+                            callback({ result: 'Transaction ' + hash + ' Sent' });
+                        }
+                    })
+                    .on('confirmation', function (confirmationNumber, receipt) {
+                        console.log(confirmationNumber, receipt);
+                        if (!async) {
+                            callback({ result: message });
+                        }
+                    })
+                    .on('receipt', function (receipt) {
+                        console.log(receipt);
+                        if (!async) {
+                            callback({ result: message });
+                        }
+                    })
+                    .on('error', function (error, receipt) {
+                        console.error(error);
+                        console.error(receipt);
+                        if (receipt) {
+                            callback({ error: 'Gas Not Enough' });
+                        } else {
+                            callback({ error: 'Failed' });
+                        };
+                    });
+            });
+    });
+}
+
 app.post('/add', function (req, res) {
     getMyAddress().then(function (address) {
         getStatus(address, function (status) {
             if (status === STATUS.NOT_APPLIED) {
                 if (req.body && req.body.name && req.body.caCert && req.body.homeUrl) {
-                    res.send('TODO');
+                    pem.checkCertificate(req.body.caCert, function (err, valid) {
+                        if (valid) {
+                            setContract(getContract().methods.addCompany(req.body.name, req.body.caCert, req.body.homeUrl), 'Added', req.body.async, function (resp) {
+                                if (resp.result) {
+                                    insertAddressIfNotExist(mongoDBConnection.db('Group').collection('all'), req.body.address).then(function () {
+                                        res.send(resp);
+                                    });
+                                } else {
+                                    res.status(400).send(resp);
+                                }
+                            });
+                        } else {
+                            res.status(400).send({ error: 'Invalid Certificate' })
+                        }
+                    })
                 } else {
                     res.status(400).send('Bad Request');
                 }
@@ -276,12 +330,32 @@ app.post('/add', function (req, res) {
     });
 });
 
-app.post('/update', function (req, res) {
+app.post('/update/ca-cert', function (req, res) {
     getMyAddress().then(function (address) {
         getStatus(address, function (status) {
             if (status !== STATUS.NOT_APPLIED) {
-                if (req.body && (req.body.caCert || req.body.homeUrl)) {
-                    res.send('TODO');
+                if (req.body && req.body.caCert) {
+                    if (req.body.caCert) {
+                        setContract(getContract().methods.updateCompanyCaCert(req.body.caCert), 'Updated', req.body.async, res.send);
+                    }
+                } else {
+                    res.status(400).send('Bad Request');
+                }
+            } else {
+                res.status(403).send('Forbidden');
+            }
+        });
+    });
+});
+
+app.post('/update/home-url', function (req, res) {
+    getMyAddress().then(function (address) {
+        getStatus(address, function (status) {
+            if (status !== STATUS.NOT_APPLIED) {
+                if (req.body && req.body.homeUrl) {
+                    if (req.body.homeUrl) {
+                        setContract(getContract().methods.updateCompanyHomeUrl(req.body.homeUrl), 'Updated', req.body.async, res.send);
+                    }
                 } else {
                     res.status(400).send('Bad Request');
                 }
@@ -297,7 +371,22 @@ app.post('/approve', function (req, res) {
         getStatus(address, function (status) {
             if (status === STATUS.APPROVED) {
                 if (req.body && req.body.address) {
-                    res.send('TODO');
+                    getStatus(req.body.address, function (status) {
+                        if (status === STATUS.PENDING) {
+                            setContract(getContract().methods.approveCompany(req.body.address), 'Approved', req.body.async, function (resp) {
+                                if (resp.result) {
+                                    mongoDBConnection.db('Group').collection('dismiss').deleteOne({ address: req.body.address }, function (error, doc) { });
+                                    insertAddressIfNotExist(mongoDBConnection.db('Group').collection('approved'), req.body.address).then(function () {
+                                        res.send(resp);
+                                    });
+                                } else {
+                                    res.status(400).send(resp);
+                                }
+                            });
+                        } else {
+                            res.send(400).send({ error: 'Invalid Status' });
+                        }
+                    })
                 } else {
                     res.status(400).send('Bad Request');
                 }
@@ -313,7 +402,15 @@ app.post('/dismiss', function (req, res) {
         getStatus(address, function (status) {
             if (status === STATUS.APPROVED) {
                 if (req.body && req.body.address) {
-                    res.send('TODO');
+                    getStatus(req.body.address, function (status) {
+                        if (status === STATUS.PENDING) {
+                            insertAddressIfNotExist(mongoDBConnection.db('Group').collection('dismiss'), req.body.address).then(function () {
+                                res.send({ retult: 'Dismissed' });
+                            })
+                        } else {
+                            res.send(400).send({ error: 'Invalid Status' });
+                        }
+                    })
                 } else {
                     res.status(400).send('Bad Request');
                 }
