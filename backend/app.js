@@ -384,7 +384,7 @@ app.post('/approve', function (req, res) {
                                 }
                             });
                         } else {
-                            res.send(400).send({ error: 'Invalid Status' });
+                            res.status(400).send({ error: 'Invalid Status' });
                         }
                     })
                 } else {
@@ -408,7 +408,7 @@ app.post('/dismiss', function (req, res) {
                                 res.send({ retult: 'Dismissed' });
                             })
                         } else {
-                            res.send(400).send({ error: 'Invalid Status' });
+                            res.status(400).send({ error: 'Invalid Status' });
                         }
                     })
                 } else {
