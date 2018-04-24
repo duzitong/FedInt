@@ -255,6 +255,19 @@ app.get('/companies/:id', function (req, res) {
     });
 });
 
+app.get('/self', function (req, res) {
+    getMyAddress().then(function (address) {
+        getContract().methods.getCompanyInfo(address).call().then(function (result) {
+            let company = {}
+            company['address'] = address;
+            company['name'] = result['name'];
+            company['caCert'] = result['caCert'];
+            company['homeUrl'] = result['homeUrl'];
+            res.send(company);
+        });
+    });
+})
+
 app.get('/status', function (req, res) {
     getMyAddress().then(function (address) {
         getStatus(address, function (status) {
