@@ -199,7 +199,7 @@ MongoClient.connect(url, function (err, database) {
     });
 });
 
-var sendCompanyDetailsByDocs = function (res, docs) {
+var sendCompanyDetailsByDocs = function (res, docs, next) {
     let resp = [];
     Promise.all(docs.map(function (doc) {
         return getContract().methods.getCompanyInfo(doc['address']).call().then(function (result) {
@@ -212,19 +212,19 @@ var sendCompanyDetailsByDocs = function (res, docs) {
         });
     })).then(function () {
         res.send(resp);
-    });
+    }).catch(next);
 }
 
 app.use(bodyParser.json());
 
-app.get('/companies', function (req, res) {
+app.get('/companies', function (req, res, next) {
     if (req.query.approved) {
         getDocsInCollection(mongoDBConnection.db('Group'), 'approved', function (docs) {
-            sendCompanyDetailsByDocs(res, docs);
+            sendCompanyDetailsByDocs(res, docs, next);
         });
     } else if (req.query.dismissed) {
         getDocsInCollection(mongoDBConnection.db('Group'), 'dismiss', function (docs) {
-            sendCompanyDetailsByDocs(res, docs);
+            sendCompanyDetailsByDocs(res, docs, next);
         });
     } else if (req.query.pending) {
         getDocsInCollection(mongoDBConnection.db('Group'), 'approved', function (approved) {
@@ -233,18 +233,18 @@ app.get('/companies', function (req, res) {
                     return doc.address;
                 }));
                 mongoDBConnection.db('Group').collection('all').find({ address: { $nin: expctions } }).toArray(function (err, docs) {
-                    sendCompanyDetailsByDocs(res, docs);
+                    sendCompanyDetailsByDocs(res, docs, next);
                 });
             });
         });
     } else {
         getDocsInCollection(mongoDBConnection.db('Group'), 'all', function (docs) {
-            sendCompanyDetailsByDocs(res, docs);
+            sendCompanyDetailsByDocs(res, docs, next);
         });
     }
 });
 
-app.get('/companies/:id', function (req, res) {
+app.get('/companies/:id', function (req, res, next) {
     getContract().methods.getCompanyInfo(req.params.id).call().then(function (result) {
         let company = {}
         company['address'] = req.params.id;
@@ -252,10 +252,10 @@ app.get('/companies/:id', function (req, res) {
         company['caCert'] = result['caCert'];
         company['homeUrl'] = result['homeUrl'];
         res.send(company);
-    });
+    }).catch(next);
 });
 
-app.get('/self', function (req, res) {
+app.get('/self', function (req, res, next) {
     getMyAddress().then(function (address) {
         getContract().methods.getCompanyInfo(address).call().then(function (result) {
             let company = {}
@@ -265,7 +265,7 @@ app.get('/self', function (req, res) {
             company['homeUrl'] = result['homeUrl'];
             res.send(company);
         });
-    });
+    }).catch(next);
 })
 
 app.get('/status', function (req, res) {
@@ -273,7 +273,7 @@ app.get('/status', function (req, res) {
         getStatus(address, function (status) {
             res.send({ status: status });
         });
-    });
+    }).catch(next);
 });
 
 function setContract(func, message, async, callback) {
@@ -340,7 +340,7 @@ app.post('/add', function (req, res) {
                 res.status(403).send('Forbidden');
             }
         });
-    });
+    }).catch(next);
 });
 
 app.post('/update/ca-cert', function (req, res) {
@@ -358,7 +358,7 @@ app.post('/update/ca-cert', function (req, res) {
                 res.status(403).send('Forbidden');
             }
         });
-    });
+    }).catch(next);
 });
 
 app.post('/update/home-url', function (req, res) {
@@ -376,7 +376,7 @@ app.post('/update/home-url', function (req, res) {
                 res.status(403).send('Forbidden');
             }
         });
-    });
+    }).catch(next);
 });
 
 app.post('/approve', function (req, res) {
@@ -407,7 +407,7 @@ app.post('/approve', function (req, res) {
                 res.status(403).send('Forbidden');
             }
         });
-    });
+    }).catch(next);
 });
 
 app.post('/dismiss', function (req, res) {
@@ -431,7 +431,7 @@ app.post('/dismiss', function (req, res) {
                 res.status(403).send('Forbidden');
             }
         });
-    });
+    }).catch(next);
 });
 
 app.use(function (req, res, next) {
