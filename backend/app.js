@@ -257,13 +257,19 @@ app.get('/companies/:id', function (req, res, next) {
 
 app.get('/self', function (req, res, next) {
     getMyAddress().then(function (address) {
-        getContract().methods.getCompanyInfo(address).call().then(function (result) {
-            let company = {}
-            company['address'] = address;
-            company['name'] = result['name'];
-            company['caCert'] = result['caCert'];
-            company['homeUrl'] = result['homeUrl'];
-            res.send(company);
+        getStatus(address, function (status) {
+            if (status === STATUS.NOT_APPLIED) {
+                res.send({address, address});
+            } else {
+                getContract().methods.getCompanyInfo(address).call().then(function (result) {
+                    let company = {}
+                    company['address'] = address;
+                    company['name'] = result['name'];
+                    company['caCert'] = result['caCert'];
+                    company['homeUrl'] = result['homeUrl'];
+                    res.send(company);
+                });
+            }
         });
     }).catch(next);
 })
