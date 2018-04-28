@@ -1,21 +1,74 @@
-apiVersion: v1
-kind: Pod
+apiVersion: apps/v1beta1
+kind: StatefulSet
 metadata:
-  name: fed-int
+  name: "fedint"
 spec:
-  containers:
-    - name: fed-int
-      image: 'containers.cisco.com/zidlu/fed-int:latest'
+  serviceName: "fedint"
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: "fedint"
+    spec:
+      volumes:
+      - name: vault-token
+        emptyDir: {}
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - fedint
+                topologyKey: kubernetes.io/hostname
+      containers:
+      - name: "fedint"
+        image: containers.cisco.com/zidlu/fed-int:latest
+        imagePullPolicy: Always
+        terminationGracePeriodSeconds: 300
+        securityContext:
+          runAsUser: 0
+        resources:
+          limits:
+            cpu: 1
+            memory: 1Gi
+          requests:
+            cpu: 1
+            memory: 1Gi
+        ports:
+        - containerPort: 3000
+          name: ui
+        - containerPort: 443
+          protocol: TCP
+          name: https
+        - containerPort: 80
+          protocol: TCP
+          name: http
+        - containerPort: 8080
+          protocol: TCP
+          name: api
+        volumeMounts:
+        - name: "datadir"
+          mountPath: /data
+        env:
+          - name: POD_NAMESPACE
+            valueFrom:
+              fieldRef:
+                apiVersion: v1
+                fieldPath: metadata.namespace
+          - name: IPC_PATH
+            value: /data/ethereum/node/geth.ipc
+          - name: CONTRACT_ADDRESS
+            value: '0xB27A2fC06E8048C2b746C62979C56dbcF54F5176'
+  volumeClaimTemplates:
+  - metadata:
+      name: "datadir"
+    spec:
+      accessModes: [ "ReadWriteMany" ]
       resources:
-        limits:
-          cpu: 1
-          memory: 1Gi
         requests:
-          cpu: 1
-          memory: 1Gi
-      imagePullPolicy: Always
-      terminationGracePeriodSeconds: 30
-      securityContext:
-        runAsUser: 0
-  restartPolicy: OnFailure
-
+          storage: "1Gi"

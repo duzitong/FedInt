@@ -274,7 +274,7 @@ app.get('/self', function (req, res, next) {
     }).catch(next);
 })
 
-app.get('/status', function (req, res) {
+app.get('/status', function (req, res, next) {
     getMyAddress().then(function (address) {
         getStatus(address, function (status) {
             res.send({ status: status });
