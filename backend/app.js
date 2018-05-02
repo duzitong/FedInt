@@ -6,12 +6,13 @@ var MongoClient = require('mongodb').MongoClient
     , fs = require('fs')
     , pem = require('pem')
     , assert = require('assert')
+    , {execSync} = require('child_process')
     , abi = require('./abi.json');
 
 var url = 'mongodb://localhost:27017/';
 var ipc_path = process.env.IPC_PATH;
-var contractAddress = '0xB27A2fC06E8048C2b746C62979C56dbcF54F5176';
-var certPath = 'certs.pem';
+var contractAddress = '0x1e9677f6aD4d04417D3427Ec0F6652981414e63C';
+var certPath = '/usr/local/etc/nginx/ssl/client.pem';
 var app = express();
 var mongoDBConnection, contract;
 var STATUS = {
@@ -107,7 +108,8 @@ var updateCertPem = function (docs) {
             if (err) {
                 return console.error(err);
             } else {
-                console.log('CA Certs updated.')
+                restart = execSync('nginx -s reload');
+                console.log('nginx restarted.');
             }
         });
     });
@@ -283,6 +285,7 @@ app.get('/status', function (req, res, next) {
 });
 
 function setContract(func, message, async, callback) {
+    let returned = false;
     getMyAddress().then(function (address) {
         func.estimateGas({ from: address })
             .then(function (gasAmount) {
@@ -296,13 +299,15 @@ function setContract(func, message, async, callback) {
                     })
                     .on('confirmation', function (confirmationNumber, receipt) {
                         console.log(confirmationNumber, receipt);
-                        if (!async) {
+                        if (!async && !returned) {
+                            returned = true;
                             callback({ result: message });
                         }
                     })
                     .on('receipt', function (receipt) {
                         console.log(receipt);
-                        if (!async) {
+                        if (!async && !returned) {
+                            returned = true;
                             callback({ result: message });
                         }
                     })
@@ -319,7 +324,7 @@ function setContract(func, message, async, callback) {
     });
 }
 
-app.post('/add', function (req, res) {
+app.post('/add', function (req, res, next) {
     getMyAddress().then(function (address) {
         getStatus(address, function (status) {
             if (status === STATUS.NOT_APPLIED) {
@@ -349,7 +354,7 @@ app.post('/add', function (req, res) {
     }).catch(next);
 });
 
-app.post('/update/ca-cert', function (req, res) {
+app.post('/update/ca-cert', function (req, res, next) {
     getMyAddress().then(function (address) {
         getStatus(address, function (status) {
             if (status !== STATUS.NOT_APPLIED) {
@@ -367,7 +372,7 @@ app.post('/update/ca-cert', function (req, res) {
     }).catch(next);
 });
 
-app.post('/update/home-url', function (req, res) {
+app.post('/update/home-url', function (req, res, next) {
     getMyAddress().then(function (address) {
         getStatus(address, function (status) {
             if (status !== STATUS.NOT_APPLIED) {
@@ -385,7 +390,7 @@ app.post('/update/home-url', function (req, res) {
     }).catch(next);
 });
 
-app.post('/approve', function (req, res) {
+app.post('/approve', function (req, res, next) {
     getMyAddress().then(function (address) {
         getStatus(address, function (status) {
             if (status === STATUS.APPROVED) {
@@ -416,7 +421,7 @@ app.post('/approve', function (req, res) {
     }).catch(next);
 });
 
-app.post('/dismiss', function (req, res) {
+app.post('/dismiss', function (req, res, next) {
     getMyAddress().then(function (address) {
         getStatus(address, function (status) {
             if (status === STATUS.APPROVED) {
