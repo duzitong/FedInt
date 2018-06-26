@@ -285,7 +285,6 @@ app.get('/status', function (req, res, next) {
 });
 
 function setContract(func, message, async, callback) {
-    let returned = false;
     getMyAddress().then(function (address) {
         func.estimateGas({ from: address })
             .then(function (gasAmount) {
@@ -299,17 +298,12 @@ function setContract(func, message, async, callback) {
                     })
                     .on('confirmation', function (confirmationNumber, receipt) {
                         console.log(confirmationNumber, receipt);
-                        if (!async && !returned) {
-                            returned = true;
+                        if (!async && confirmationNumber == 0) {
+                            console.log(confirmationNumber);
                             callback({ result: message });
                         }
                     })
                     .on('receipt', function (receipt) {
-                        console.log(receipt);
-                        if (!async && !returned) {
-                            returned = true;
-                            callback({ result: message });
-                        }
                     })
                     .on('error', function (error, receipt) {
                         console.error(error);
@@ -360,7 +354,9 @@ app.post('/update/ca-cert', function (req, res, next) {
             if (status !== STATUS.NOT_APPLIED) {
                 if (req.body && req.body.caCert) {
                     if (req.body.caCert) {
-                        setContract(getContract().methods.updateCompanyCaCert(req.body.caCert), 'Updated', req.body.async, res.send);
+                        setContract(getContract().methods.updateCompanyCaCert(req.body.caCert), 'Updated', req.body.async, function(resp) {
+                            res.send(resp);
+                        });
                     }
                 } else {
                     res.status(400).send('Bad Request');
@@ -378,7 +374,9 @@ app.post('/update/home-url', function (req, res, next) {
             if (status !== STATUS.NOT_APPLIED) {
                 if (req.body && req.body.homeUrl) {
                     if (req.body.homeUrl) {
-                        setContract(getContract().methods.updateCompanyHomeUrl(req.body.homeUrl), 'Updated', req.body.async, res.send);
+                        setContract(getContract().methods.updateCompanyHomeUrl(req.body.homeUrl), 'Updated', req.body.async, function(resp) {
+                            res.send(resp);
+                        });
                     }
                 } else {
                     res.status(400).send('Bad Request');
